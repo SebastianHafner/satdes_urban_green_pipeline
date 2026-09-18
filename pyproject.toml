@@ -1,0 +1,36 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "satdes-urban-green-pipeline"
+version = "0.1.0"
+description = "Multi-year urban green statistics pipeline for Sweden, built on Digital Earth Sweden annual max-NDVI composites (SATDES Task 1, Subtask 1.6)."
+requires-python = ">=3.10"
+dependencies = [
+    "geopandas>=0.14",
+    "shapely>=2.0",
+    "rasterio>=1.3",
+    "numpy>=1.24",
+    "scipy>=1.10",
+    "scikit-learn>=1.3",
+    "openeo>=0.47",
+    "rioxarray>=0.15",
+    "xarray>=2024.1",
+    "pandas>=2.0",
+    "matplotlib>=3.8",
+    "tqdm>=4.65",
+    "pyarrow>=14.0",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=7.0"]
+
+[project.scripts]
+urban-green = "urban_green.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
