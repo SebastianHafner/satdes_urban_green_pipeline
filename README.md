@@ -72,6 +72,18 @@ Pass `--region-id-field <column>` to also get per-named-sub-region
 statistics when the ROI has multiple features (e.g. several municipalities
 or tätorter).
 
+`tests/data/tatorter_2023_orebro.parquet` (the Örebro tätort boundary,
+EPSG:3006) is bundled as a ready-made example ROI — the same one the
+Overleaf Subtask 1.5 report validates against — useful for a quick first
+run or for manual/debug testing:
+
+```bash
+python -m urban_green.cli \
+    --roi tests/data/tatorter_2023_orebro.parquet \
+    --years 2022:2025 \
+    --out ./outputs
+```
+
 ### Tile store (acquisition cache)
 
 `--tile-store <path>` (default `./tile_store`) points at a shared cache of
