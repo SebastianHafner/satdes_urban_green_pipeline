@@ -15,7 +15,16 @@ It wires together:
   the same openEO query logic as
   [`satdes_maxndvi`](../satdes_maxndvi) (`main_server_batch.py`),
   generalized from a single hardcoded year to an arbitrary year range and
-  from a pre-tiled file to the caller's own ROI.
+  from a pre-tiled file to tiles of a fixed national grid resolved against
+  the caller's own ROI.
+- **Tiling** — a fixed grid anchored at (0, 0) in EPSG:3006 (10 km cells by
+  default, matching Lantmäteriet's national index grid convention), not a
+  per-ROI bounding-box grid. A tile's identity (row, col) is therefore
+  independent of which ROI requested it, so the same tile acquired for one
+  ROI is reused for any other ROI that overlaps it.
+- **Tile store** — a shared, cross-run cache (`tile_store/`, SQLite +
+  GeoTIFFs) of acquired tiles. Before acquiring a tile/year, the pipeline
+  checks whether it's already cached and skips the DES call if so.
 - **Thresholding** — the vegetated/non-vegetated classification method
   recommended in the Subtask 1.5 (Overleaf) thresholding report: a single
   Gaussian Mixture Model fit on urban-masked NDVI pixels pooled across all
@@ -63,6 +72,17 @@ Pass `--region-id-field <column>` to also get per-named-sub-region
 statistics when the ROI has multiple features (e.g. several municipalities
 or tätorter).
 
+### Tile store (acquisition cache)
+
+`--tile-store <path>` (default `./tile_store`) points at a shared cache of
+acquired NDVI tiles, reused across runs and ROIs — run the pipeline again
+over an overlapping or adjacent ROI and any tiles already in the store are
+reused instead of re-downloaded. The cache key is **`(row, col, year)`
+only** — it does *not* include `--crs` or `--cloud-threshold` — so changing
+either against an existing store will silently reuse tiles acquired under
+the old parameters. Use `--force-reacquire` to bypass the cache, or point
+`--tile-store` at a fresh directory, if you change either setting.
+
 ### Notebook
 
 `notebooks/urban_green_demo.ipynb` is a thin GUI front end over the same
@@ -99,10 +119,10 @@ Figures matching the Overleaf thresholding report's style are written under
 `<output_dir>/figures/` (NDVI distribution with threshold overlay, green
 area time series with year-on-year change bars).
 
-Intermediate per-tile and per-year mosaic rasters are kept under
-`<output_dir>/acquisition/` and `<output_dir>/stitched/` for inspection or
-reuse across runs (acquisition is resumable: existing tile files are
-skipped).
+Per-tile NDVI rasters live in the shared tile store (`--tile-store`, default
+`./tile_store/<row>_<col>/<year>/`), not under `<output_dir>` — they're
+cross-run/cross-ROI, not specific to this one. Per-year stitched mosaics for
+this ROI are kept under `<output_dir>/stitched/` for inspection.
 
 ## Design notes
 
@@ -119,6 +139,11 @@ skipped).
   (not just `.intersects()`, which also matches tiles that merely touch the
   ROI boundary with zero overlapping area) — avoids wasted DES acquisition
   calls for tiles with nothing to cover.
+- The tile store registers a tile only after it has been successfully
+  written to disk, so an interrupted run never leaves a tile falsely marked
+  as cached; `is_available()` also re-checks that the files still exist on
+  disk, so a manually deleted tile is treated as missing rather than a
+  stale hit.
 - The change-year product encodes the **first** transition per pixel per
   direction (matching the convention of products like Hansen Global Forest
   Change's "loss year"); loss and gain are reported as separate rasters
@@ -131,10 +156,10 @@ pip install -e ".[dev]"
 pytest
 ```
 
-The test suite covers the thresholding, change-detection, statistics, and
-ROI-tiling logic directly, plus one end-to-end integration test that runs
-the full pipeline with the DES acquisition step mocked out (everything
-except the live network call).
+The test suite covers the thresholding, change-detection, statistics,
+national-grid tiling, and tile-store caching logic directly, plus one
+end-to-end integration test that runs the full pipeline with the DES
+acquisition step mocked out (everything except the live network call).
 
 ## Debugging in VS Code
 

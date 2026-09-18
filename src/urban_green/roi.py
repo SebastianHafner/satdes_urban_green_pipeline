@@ -1,20 +1,21 @@
 """Region-of-interest ingestion: load, tile, and rasterize an arbitrary Swedish ROI.
 
-Tiling logic is adapted from satdes_maxndvi/tiling.py (generalized to a
-function, and restricted to tiles that actually intersect the ROI geometry
-instead of tiling the full bounding-box grid).
+Tiling resolves ROI features against the fixed national grid (see
+urban_green.grid) rather than tiling each ROI's own bounding box, so tile
+identity (row, col) is independent of the requesting ROI and reusable
+across runs via urban_green.tile_store.
 """
 from __future__ import annotations
 
-import math
 from pathlib import Path
-from typing import Optional, Tuple
+from typing import List, Tuple
 
 import geopandas as gpd
 import numpy as np
 from rasterio.features import rasterize
 from rasterio.transform import Affine, from_origin
-from shapely.geometry import box
+
+from urban_green.grid import GRID_CRS, TILE_SIZE_M_DEFAULT, Tile, national_grid_tiles
 
 
 def load_roi(roi_path: Path, crs: str) -> gpd.GeoDataFrame:
@@ -28,48 +29,35 @@ def load_roi(roi_path: Path, crs: str) -> gpd.GeoDataFrame:
     return gdf.to_crs(crs)
 
 
-def tile_roi(roi: gpd.GeoDataFrame, tile_size: int, region_id_field: Optional[str] = None) -> gpd.GeoDataFrame:
-    """Split each ROI feature into a grid of tile_size x tile_size boxes.
+def tile_roi(roi: gpd.GeoDataFrame, tile_size: float = TILE_SIZE_M_DEFAULT) -> List[Tile]:
+    """Resolve the fixed national grid tiles that positively overlap the ROI.
 
-    Only tiles that intersect the feature's geometry are kept (unlike the
-    original tiling.py, which tiled the full bounding box regardless of the
-    polygon's shape).
+    The ROI's CRS must be EPSG:3006 (the fixed grid's CRS); reproject with
+    load_roi(..., crs="EPSG:3006") first. Tiles are deduplicated across ROI
+    features, so a tile shared by two adjacent regions is only listed once.
     """
-    records = {"name": [], "tile_j": [], "tile_i": [], "tile_id": [], "geometry": []}
-    for idx, row in roi.iterrows():
-        name = str(row[region_id_field]) if region_id_field else str(idx)
-        geom = row.geometry
-        minx, miny, maxx, maxy = geom.bounds
-        # ceil (not int(...)+1, satdes_maxndvi/tiling.py's original formula) avoids
-        # an extra degenerate zero-width/height tile when a dimension is exactly
-        # divisible by tile_size.
-        n = max(1, math.ceil((maxx - minx) / tile_size))
-        m = max(1, math.ceil((maxy - miny) / tile_size))
+    if str(roi.crs) != GRID_CRS:
+        raise ValueError(
+            f"the national tiling grid is fixed to {GRID_CRS}, but the ROI is in {roi.crs} -- "
+            f"reproject the ROI to {GRID_CRS} first (see load_roi)."
+        )
 
-        for j in range(n):
-            for i in range(m):
-                minx_tile = minx + j * tile_size
-                maxy_tile = maxy - i * tile_size
-                maxx_tile = maxx if j == n - 1 else minx_tile + tile_size
-                miny_tile = miny if i == m - 1 else maxy_tile - tile_size
-                tile_geom = box(minx_tile, miny_tile, maxx_tile, maxy_tile)
-
-                # area > 0 (not just .intersects()) excludes tiles that only touch the
-                # ROI boundary with zero overlapping area, which would otherwise trigger
-                # a wasted DES acquisition call for a tile with nothing to cover.
-                if tile_geom.intersection(geom).area <= 0:
-                    continue
-
-                records["name"].append(name)
-                records["tile_j"].append(j)
-                records["tile_i"].append(i)
-                records["tile_id"].append(f"{name}_{j}_{i}")
-                records["geometry"].append(tile_geom)
-
-    if not records["geometry"]:
+    footprint = roi.union_all() if hasattr(roi, "union_all") else roi.unary_union
+    tiles = national_grid_tiles(footprint, tile_size)
+    if not tiles:
         raise ValueError("ROI tiling produced no tiles; check the ROI geometry and tile_size.")
+    return tiles
 
-    return gpd.GeoDataFrame(records, crs=roi.crs)
+
+def tiles_to_geodataframe(tiles: List[Tile], crs: str) -> gpd.GeoDataFrame:
+    """Convenience conversion for inspection/debugging (e.g. writing tiles.parquet)."""
+    records = {
+        "row": [t.row for t in tiles],
+        "col": [t.col for t in tiles],
+        "tile_id": [t.name for t in tiles],
+        "geometry": [t.geometry for t in tiles],
+    }
+    return gpd.GeoDataFrame(records, crs=crs)
 
 
 def roi_grid_transform(roi: gpd.GeoDataFrame, grid_size: int) -> Tuple[Affine, Tuple[int, int]]:

@@ -6,20 +6,27 @@ arbitrary multi-year range and the caller's own ROI tiles instead of a
 pre-tiled file and a single hardcoded year. The max-NDVI band is written as
 native float16 (no [0, 200] uint8 encoding), and observation count as a
 separate uint16 file since a single GeoTIFF cannot mix per-band dtypes.
+
+Tiles are resolved against the fixed national grid (urban_green.grid) and
+cached in a shared urban_green.tile_store.TileStore, so a tile already
+acquired by a previous run (for this or any other ROI) is reused instead of
+being re-downloaded.
 """
 from __future__ import annotations
 
 import logging
 from pathlib import Path
+from typing import List
 
-import geopandas as gpd
 import numpy as np
 import openeo
 import rasterio
 from tqdm import tqdm
 
 from urban_green.config import PipelineConfig
+from urban_green.grid import Tile
 from urban_green.maxndvi import composite, helpers, sentinel2
+from urban_green.tile_store import TileStore
 
 logger = logging.getLogger(__name__)
 
@@ -31,6 +38,7 @@ def connect(config: PipelineConfig):
 
 
 def _write_single_band(array: np.ndarray, transform, crs, out_file: Path, dtype: str, nodata) -> None:
+    out_file.parent.mkdir(parents=True, exist_ok=True)
     with rasterio.open(
         out_file,
         "w",
@@ -46,10 +54,10 @@ def _write_single_band(array: np.ndarray, transform, crs, out_file: Path, dtype:
         dst.write(array, 1)
 
 
-def acquire_tile_year(connection, tile_geom, tile_id: str, year: int, config: PipelineConfig, out_dir: Path) -> Path:
+def acquire_tile_year(connection, tile: Tile, year: int, config: PipelineConfig, ndvi_out: Path, obs_out: Path) -> None:
     """Compute the annual max-NDVI + observation count for one tile/year and write it to disk."""
-    ndvi_cube, _ = sentinel2.load_ndvi_cube(connection, tile_geom, config.crs, year, config.cloud_threshold)
-    scl_cube = sentinel2.load_scl_cube(connection, tile_geom, config.crs, year, config.cloud_threshold)
+    ndvi_cube, _ = sentinel2.load_ndvi_cube(connection, tile.geometry, config.crs, year, config.cloud_threshold)
+    scl_cube = sentinel2.load_scl_cube(connection, tile.geometry, config.crs, year, config.cloud_threshold)
     ndvi_masked_cube = sentinel2.cloud_masking(ndvi_cube, scl_cube)
 
     valid_obs_count = ndvi_masked_cube.reduce_dimension(dimension="t", reducer="count")
@@ -70,22 +78,16 @@ def acquire_tile_year(connection, tile_geom, tile_id: str, year: int, config: Pi
     ndvi_arr = values[0].astype(np.float16)
     obs_arr = np.nan_to_num(values[1], nan=0).astype(np.uint16)
 
-    ndvi_out = out_dir / f"ndvi_{tile_id}_{year}.tif"
-    obs_out = out_dir / f"obs_{tile_id}_{year}.tif"
     _write_single_band(ndvi_arr, transform, crs, ndvi_out, "float16", np.nan)
     _write_single_band(obs_arr, transform, crs, obs_out, "uint16", 0)
-    return ndvi_out
 
 
-def acquire_all(
-    connection, tiles: gpd.GeoDataFrame, years, config: PipelineConfig, out_dir: Path
-) -> None:
-    out_dir.mkdir(parents=True, exist_ok=True)
+def acquire_all(connection, tiles: List[Tile], years, config: PipelineConfig, tile_store: TileStore) -> None:
     for year in years:
-        year_dir = out_dir / f"y{year}" / "tiles"
-        year_dir.mkdir(parents=True, exist_ok=True)
-        for tile in tqdm(list(tiles.itertuples()), desc=f"acquiring {year}"):
-            out_file = year_dir / f"ndvi_{tile.tile_id}_{year}.tif"
-            if out_file.exists():
-                continue  # resume support: skip tiles already acquired
-            acquire_tile_year(connection, tile.geometry, tile.tile_id, year, config, year_dir)
+        for tile in tqdm(tiles, desc=f"acquiring {year}"):
+            if not config.force_reacquire and tile_store.is_available(tile.row, tile.col, year):
+                continue  # cached: reuse the tile already acquired by this or a previous run
+
+            ndvi_out, obs_out = tile_store.paths(tile.row, tile.col, year)
+            acquire_tile_year(connection, tile, year, config, ndvi_out, obs_out)
+            tile_store.register(tile.row, tile.col, year, config.crs, config.cloud_threshold, ndvi_out, obs_out)

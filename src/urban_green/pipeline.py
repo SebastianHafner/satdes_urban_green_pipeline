@@ -16,7 +16,15 @@ from rasterio.warp import Resampling, reproject
 
 from urban_green import acquisition, change, report, statistics, stitching, thresholding
 from urban_green.config import PipelineConfig
-from urban_green.roi import load_roi, rasterize_roi_mask, region_masks, roi_grid_transform, tile_roi
+from urban_green.roi import (
+    load_roi,
+    rasterize_roi_mask,
+    region_masks,
+    roi_grid_transform,
+    tile_roi,
+    tiles_to_geodataframe,
+)
+from urban_green.tile_store import TileStore
 
 logger = logging.getLogger(__name__)
 
@@ -46,20 +54,21 @@ def run(config: PipelineConfig) -> Path:
     logger.info("Loading ROI: %s", config.roi_path)
     roi = load_roi(config.roi_path, config.crs)
 
-    logger.info("Tiling ROI (tile_size=%d m)", config.tile_size)
-    tiles = tile_roi(roi, config.tile_size, config.region_id_field)
-    tiles.to_parquet(config.output_dir / "tiles.parquet")
+    logger.info("Resolving national grid tiles (tile_size=%d m)", config.tile_size)
+    tiles = tile_roi(roi, config.tile_size)
+    tiles_to_geodataframe(tiles, config.crs).to_parquet(config.output_dir / "tiles.parquet")
 
     logger.info("Connecting to Digital Earth Sweden (%s)", config.des_endpoint)
     connection = acquisition.connect(config)
 
-    acquisition_dir = config.output_dir / "acquisition"
-    logger.info("Acquiring annual max-NDVI for %d tiles x %d years", len(tiles), len(config.years))
-    acquisition.acquire_all(connection, tiles, config.years, config, acquisition_dir)
+    logger.info("Tile store: %s", config.tile_store_dir)
+    with TileStore(config.tile_store_dir) as tile_store:
+        logger.info("Acquiring annual max-NDVI for %d tiles x %d years", len(tiles), len(config.years))
+        acquisition.acquire_all(connection, tiles, config.years, config, tile_store)
 
-    stitched_dir = config.output_dir / "stitched"
-    logger.info("Stitching tiles per year")
-    stitched = stitching.stitch_acquisition(acquisition_dir, config.years, stitched_dir)
+        stitched_dir = config.output_dir / "stitched"
+        logger.info("Stitching tiles per year")
+        stitched = stitching.stitch_from_store(tile_store, tiles, config.years, stitched_dir)
 
     transform, out_shape = roi_grid_transform(roi, config.grid_size)
     mask = rasterize_roi_mask(roi, transform, out_shape)

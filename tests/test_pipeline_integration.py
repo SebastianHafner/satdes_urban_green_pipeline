@@ -43,12 +43,14 @@ def _write_synthetic_tile(out_file: Path, year_index: int) -> None:
         dst.write(ndvi.astype(np.float16), 1)
 
 
-def _fake_acquire_all(connection, tiles, years, config, out_dir) -> None:
-    tile_id = list(tiles.itertuples())[0].tile_id
+def _fake_acquire_all(connection, tiles, years, config, tile_store) -> None:
+    tile = tiles[0]
     for i, year in enumerate(years):
-        year_dir = out_dir / f"y{year}" / "tiles"
-        year_dir.mkdir(parents=True, exist_ok=True)
-        _write_synthetic_tile(year_dir / f"ndvi_{tile_id}_{year}.tif", i)
+        ndvi_path, obs_path = tile_store.paths(tile.row, tile.col, year)
+        obs_path.parent.mkdir(parents=True, exist_ok=True)
+        _write_synthetic_tile(ndvi_path, i)
+        obs_path.write_bytes(b"x")  # obs band is unused downstream; presence is all TileStore checks
+        tile_store.register(tile.row, tile.col, year, config.crs, config.cloud_threshold, ndvi_path, obs_path)
 
 
 def test_pipeline_run_end_to_end(tmp_path, monkeypatch):
@@ -65,6 +67,7 @@ def test_pipeline_run_end_to_end(tmp_path, monkeypatch):
         roi_path=roi_path,
         years=YEARS,
         output_dir=tmp_path / "out",
+        tile_store_dir=tmp_path / "tile_store",
         tile_size=1000,
         grid_size=GRID_SIZE,
         majority_vote_window=3,

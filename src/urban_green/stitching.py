@@ -1,9 +1,10 @@
 """Mosaic per-tile annual max-NDVI rasters into one raster per year.
 
 Adapted from satdes_maxndvi/stitching.py: generalized to work on the
-float16 output of urban_green.acquisition and to group tiles by year
-rather than by a fixed tiled-file naming scheme. Unlike the original,
-source tiles are kept on disk (not deleted) after stitching.
+float16 output of urban_green.acquisition, and to resolve tiles through
+the shared urban_green.tile_store.TileStore (rather than globbing a
+per-run directory), so only the tiles relevant to the current ROI are
+mosaicked even when the store holds many more tiles overall.
 """
 from __future__ import annotations
 
@@ -13,6 +14,9 @@ from typing import Dict, List
 import numpy as np
 import rasterio
 from rasterio.merge import merge
+
+from urban_green.grid import Tile
+from urban_green.tile_store import TileStore
 
 
 def stitch_year(tile_files: List[Path], out_file: Path, dtype: str = "float16", nodata=np.nan) -> Path:
@@ -29,14 +33,21 @@ def stitch_year(tile_files: List[Path], out_file: Path, dtype: str = "float16", 
     return out_file
 
 
-def stitch_acquisition(acquisition_dir: Path, years: List[int], out_dir: Path) -> Dict[int, Path]:
+def stitch_from_store(
+    tile_store: TileStore, tiles: List[Tile], years: List[int], out_dir: Path
+) -> Dict[int, Path]:
     out_dir.mkdir(parents=True, exist_ok=True)
     stitched = {}
     for year in years:
-        tile_dir = acquisition_dir / f"y{year}" / "tiles"
-        ndvi_tiles = sorted(tile_dir.glob("ndvi_*.tif"))
-        if not ndvi_tiles:
-            raise FileNotFoundError(f"No NDVI tiles found for year {year} in {tile_dir}")
+        ndvi_tiles = []
+        for tile in tiles:
+            record = tile_store.is_available(tile.row, tile.col, year)
+            if record is None:
+                raise FileNotFoundError(
+                    f"Tile ({tile.row}, {tile.col}) for year {year} is not in the tile store "
+                    f"at {tile_store.root} -- run acquisition before stitching."
+                )
+            ndvi_tiles.append(record.ndvi_path)
         out_file = out_dir / f"maxndvi_{year}.tif"
         stitch_year(ndvi_tiles, out_file)
         stitched[year] = out_file

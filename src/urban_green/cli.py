@@ -21,6 +21,19 @@ def main() -> None:
     parser.add_argument("--roi", required=True, help="Path to ROI vector file (any GDAL/OGR format)")
     parser.add_argument("--years", required=True, help="Year range 'start:end' or comma list, e.g. 2018:2025")
     parser.add_argument("--out", required=True, help="Output directory")
+    parser.add_argument(
+        "--tile-store",
+        default="./tile_store",
+        help=(
+            "Shared cache directory for acquired NDVI tiles, reused across runs/ROIs. "
+            "Cache key is (row, col, year) only -- NOT crs/cloud-threshold, so changing "
+            "either against an existing store silently reuses tiles built with the old "
+            "values; use --force-reacquire or a fresh --tile-store if you change them."
+        ),
+    )
+    parser.add_argument(
+        "--force-reacquire", action="store_true", help="Bypass the tile store cache and re-download every tile"
+    )
     parser.add_argument("--tile-size", type=int, default=10_000, help="DES request tile size in meters")
     parser.add_argument("--cloud-threshold", type=int, default=70, help="Max scene cloud cover percentage")
     parser.add_argument("--crs", default="EPSG:3006", help="Working CRS (default: SWEREF99 TM)")
@@ -40,6 +53,8 @@ def main() -> None:
         roi_path=args.roi,
         years=parse_years(args.years),
         output_dir=args.out,
+        tile_store_dir=args.tile_store,
+        force_reacquire=args.force_reacquire,
         tile_size=args.tile_size,
         cloud_threshold=args.cloud_threshold,
         crs=args.crs,

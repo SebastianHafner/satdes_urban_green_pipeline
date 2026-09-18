@@ -20,6 +20,13 @@ class PipelineConfig:
     years: List[int]
     output_dir: Path
 
+    # Shared, cross-run cache of per-tile annual max-NDVI acquisitions (see
+    # urban_green.tile_store). Project-local by default so it's easy to find
+    # and inspect; point multiple runs/ROIs at the same directory to reuse
+    # tiles between them.
+    tile_store_dir: Path = Path("./tile_store")
+    force_reacquire: bool = False  # bypass the tile store cache and re-download every tile
+
     tile_size: int = 10_000  # meters, per-tile DES request size
     cloud_threshold: int = 70  # max eo:cloud_cover percentage per Sentinel-2 scene
     crs: str = "EPSG:3006"  # SWEREF99 TM
@@ -43,6 +50,7 @@ class PipelineConfig:
     def __post_init__(self) -> None:
         self.roi_path = Path(self.roi_path)
         self.output_dir = Path(self.output_dir)
+        self.tile_store_dir = Path(self.tile_store_dir)
         self.years = sorted(self.years)
         if len(self.years) < 2:
             raise ValueError("At least two years are required to compute year-on-year statistics.")
