@@ -1,8 +1,9 @@
 """End-to-end test of pipeline.run() with the DES acquisition step mocked out.
 
-Exercises ROI tiling, stitching, the common-grid reprojection, thresholding,
-the change product, statistics, and report generation together - everything
-except the actual network call to Digital Earth Sweden.
+Exercises ROI tiling, stitching, the tile-grid-derived working grid,
+thresholding, the change product, statistics, and report generation
+together - everything except the actual network call to Digital Earth
+Sweden.
 """
 from __future__ import annotations
 
@@ -69,7 +70,6 @@ def test_pipeline_run_end_to_end(tmp_path, monkeypatch):
         output_dir=tmp_path / "out",
         tile_store_dir=tmp_path / "tile_store",
         tile_size=1000,
-        grid_size=GRID_SIZE,
         majority_vote_window=3,
     )
 

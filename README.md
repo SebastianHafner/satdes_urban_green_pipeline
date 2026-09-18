@@ -122,7 +122,12 @@ area time series with year-on-year change bars).
 Per-tile NDVI rasters live in the shared tile store (`--tile-store`, default
 `./tile_store/<row>_<col>/<year>/`), not under `<output_dir>` — they're
 cross-run/cross-ROI, not specific to this one. Per-year stitched mosaics for
-this ROI are kept under `<output_dir>/stitched/` for inspection.
+this ROI are kept under `<output_dir>/stitched/` for inspection. All other
+outputs (mask, vegetation rasters, change rasters) are on that same grid —
+i.e. the extent of every tile touching the ROI, not the ROI's own tight
+bounding box; the mask correctly excludes anything outside the ROI, so
+statistics are unaffected, but the raster files themselves extend slightly
+beyond the ROI boundary.
 
 ## Design notes
 
@@ -135,6 +140,13 @@ this ROI are kept under `<output_dir>/stitched/` for inspection.
   (`data_loading/sentinel2.py`, `data_loading/helpers.py`,
   `methods/composite.py`) is vendored (trimmed, unmodified query logic)
   under `src/urban_green/maxndvi/`.
+- The mask and NDVI stack are built directly on the stitched mosaic's own
+  grid (`stitching.mosaic_grid`), not on a separately computed ROI-bbox
+  grid — since tiles are acquired in EPSG:3006 (SWEREF99 TM) from the fixed
+  national grid, every year's mosaic for a given ROI is expected to already
+  share an identical pixel grid, so no resampling is needed to align years
+  or the mask. `pipeline._build_ndvi_stack` verifies this on every run and
+  raises rather than silently resampling if a year's mosaic doesn't match.
 - ROI tiling only keeps tiles with positive-area intersection with the ROI
   (not just `.intersects()`, which also matches tiles that merely touch the
   ROI boundary with zero overlapping area) — avoids wasted DES acquisition
@@ -157,8 +169,9 @@ pytest
 ```
 
 The test suite covers the thresholding, change-detection, statistics,
-national-grid tiling, and tile-store caching logic directly, plus one
-end-to-end integration test that runs the full pipeline with the DES
+national-grid tiling, tile-store caching, and tile-grid-consistency logic
+directly, plus one end-to-end integration test that runs the full pipeline
+with the DES
 acquisition step mocked out (everything except the live network call).
 
 ## Debugging in VS Code

@@ -12,39 +12,37 @@ from pathlib import Path
 
 import numpy as np
 import rasterio
-from rasterio.warp import Resampling, reproject
 
 from urban_green import acquisition, change, report, statistics, stitching, thresholding
 from urban_green.config import PipelineConfig
-from urban_green.roi import (
-    load_roi,
-    rasterize_roi_mask,
-    region_masks,
-    roi_grid_transform,
-    tile_roi,
-    tiles_to_geodataframe,
-)
+from urban_green.roi import load_roi, rasterize_roi_mask, region_masks, tile_roi, tiles_to_geodataframe
 from urban_green.tile_store import TileStore
 
 logger = logging.getLogger(__name__)
 
 
-def _build_ndvi_stack(stitched: dict, years, transform, out_shape, crs) -> np.ndarray:
-    """Resample each year's stitched mosaic onto a single common grid-aligned array."""
+def _build_ndvi_stack(stitched: dict, years, transform, out_shape) -> np.ndarray:
+    """Stack each year's stitched mosaic directly, with no resampling.
+
+    Tiles come from the fixed national grid, so every year's stitched
+    mosaic for this ROI is expected to already share an identical pixel
+    grid (see stitching.mosaic_grid) -- a mismatch means DES returned a
+    different grid for the same tiles across years, which is treated as an
+    error rather than silently resampled away.
+    """
     ndvi_stack = np.full((len(years), *out_shape), np.nan, dtype=np.float32)
     for i, year in enumerate(years):
         with rasterio.open(stitched[year]) as src:
-            dst = np.full(out_shape, np.nan, dtype=np.float32)
-            reproject(
-                source=rasterio.band(src, 1),
-                destination=dst,
-                src_transform=src.transform,
-                src_crs=src.crs,
-                dst_transform=transform,
-                dst_crs=crs,
-                resampling=Resampling.nearest,
+            grid_matches = (src.height, src.width) == out_shape and np.allclose(
+                tuple(src.transform), tuple(transform), atol=1e-6
             )
-            ndvi_stack[i] = dst
+            if not grid_matches:
+                raise ValueError(
+                    f"Stitched mosaic for year {year} has a different grid than year {years[0]} "
+                    f"(({src.height}, {src.width}), {src.transform} vs {out_shape}, {transform}) -- "
+                    "DES returned an inconsistent pixel grid across years for the same tiles."
+                )
+            ndvi_stack[i] = src.read(1).astype(np.float32)
     return ndvi_stack
 
 
@@ -70,11 +68,14 @@ def run(config: PipelineConfig) -> Path:
         logger.info("Stitching tiles per year")
         stitched = stitching.stitch_from_store(tile_store, tiles, config.years, stitched_dir)
 
-    transform, out_shape = roi_grid_transform(roi, config.grid_size)
+    # The working grid follows the tile system directly: it's the actual grid of the
+    # stitched mosaic (built from tiles of the fixed national grid), not a separately
+    # computed ROI-bbox grid -- so no resampling is needed to line up years or the mask.
+    transform, out_shape = stitching.mosaic_grid(stitched[config.years[0]])
     mask = rasterize_roi_mask(roi, transform, out_shape)
 
     logger.info("Building common NDVI stack across years")
-    ndvi_stack = _build_ndvi_stack(stitched, config.years, transform, out_shape, config.crs)
+    ndvi_stack = _build_ndvi_stack(stitched, config.years, transform, out_shape)
 
     logger.info("Thresholding (global GMM + %d-year majority vote)", config.majority_vote_window)
     result = thresholding.run_thresholding(ndvi_stack, mask, window=config.majority_vote_window)

@@ -30,7 +30,6 @@ class PipelineConfig:
     tile_size: int = 10_000  # meters, per-tile DES request size
     cloud_threshold: int = 70  # max eo:cloud_cover percentage per Sentinel-2 scene
     crs: str = "EPSG:3006"  # SWEREF99 TM
-    grid_size: int = 10  # NDVI pixel size in meters
     majority_vote_window: int = 3  # years, for temporal smoothing of the vegetation classification
 
     # Optional column in the ROI file used to name/group sub-regions (e.g. municipality name).

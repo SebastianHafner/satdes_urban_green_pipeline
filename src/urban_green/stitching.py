@@ -9,14 +9,28 @@ mosaicked even when the store holds many more tiles overall.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Dict, List
+from typing import Dict, List, Tuple
 
 import numpy as np
 import rasterio
 from rasterio.merge import merge
+from rasterio.transform import Affine
 
 from urban_green.grid import Tile
 from urban_green.tile_store import TileStore
+
+
+def mosaic_grid(path: Path) -> Tuple[Affine, Tuple[int, int]]:
+    """Read the (transform, (height, width)) of an already-stitched mosaic.
+
+    Since tiles come from the fixed national grid, every year's mosaic for
+    the same ROI is expected to share this grid exactly -- see
+    urban_green.pipeline._build_ndvi_stack, which uses this as the common
+    working grid instead of resampling each year onto a separately
+    computed one.
+    """
+    with rasterio.open(path) as src:
+        return src.transform, (src.height, src.width)
 
 
 def stitch_year(tile_files: List[Path], out_file: Path, dtype: str = "float16", nodata=np.nan) -> Path:
