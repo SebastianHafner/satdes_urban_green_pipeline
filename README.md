@@ -27,12 +27,23 @@ It wires together:
 
 ## Installation
 
+Requires Python ≥ 3.10 and GDAL ≥ 3.11 (via `rasterio`) for native
+`float16` GeoTIFF support, used for the max-NDVI rasters.
+
 ```bash
-pip install -e .
+# from the repo root
+python3 -m venv .venv
+source .venv/bin/activate      # Windows: .venv\Scripts\activate
+
+pip install --upgrade pip
+pip install -e .               # or `pip install -e ".[dev]"` to also get pytest
 ```
 
-Requires GDAL ≥ 3.11 (via `rasterio`) for native `float16` GeoTIFF support,
-used for the max-NDVI rasters.
+Verify the install:
+
+```bash
+python -m urban_green.cli --help
+```
 
 ## Usage
 
