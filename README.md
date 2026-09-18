@@ -135,3 +135,22 @@ The test suite covers the thresholding, change-detection, statistics, and
 ROI-tiling logic directly, plus one end-to-end integration test that runs
 the full pipeline with the DES acquisition step mocked out (everything
 except the live network call).
+
+## Debugging in VS Code
+
+`.vscode/launch.json` provides four debug configurations (Run and Debug
+panel, or `F5`):
+
+- **urban_green: Run CLI** — runs `urban_green.cli` with the `--roi`/
+  `--years`/`--out` args set in `launch.json`; edit them to point at your
+  own ROI. Credentials are read from a `.env` file in the repo root — copy
+  `.env.example` to `.env` and fill in `DES_USERNAME`/`DES_PASSWORD` (this
+  file is gitignored, never committed).
+- **Python: Debug Current File** — debugs whichever `.py` file is open.
+- **Python: Debug Tests (current file)** / **(all)** — runs `pytest` under
+  the debugger, either just the open test file or the whole `tests/`
+  directory.
+
+Select the repo's venv as the interpreter first (`Ctrl+Shift+P` →
+*Python: Select Interpreter*) so `urban_green` resolves via the editable
+install.
