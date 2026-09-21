@@ -1,43 +1,18 @@
-# satdes_urban_green_pipeline
+# SATDES - Experimental Pipeline for Urban Green Statistic Production
 
-A runnable, multi-year urban green statistics pipeline for Sweden. This is
-the demonstrator for **SATDES Task 1, Subtask 1.6** ("Setting up, testing
-and evaluating an interaction model ... to query and aggregate data to
-statistical result in a single pipeline"). It is not delivered as an API;
-instead it's a CLI and a thin Jupyter notebook front end over the same
-Python package, so it can be run end-to-end on an arbitrary region of
-interest.
+This demonstrator consists of a command line interface (CLI) and a Jupyter notebook front end using the same Python package.It can produce multi-year urban greeen statistics for an arbitrary region of interest within Sweden.
 
 It wires together:
 
-- **Acquisition** — annual Sentinel-2 max-NDVI + observation-count
-  composites from [Digital Earth Sweden](https://digitalearth.se), using
-  the same openEO query logic as
-  [`satdes_maxndvi`](../satdes_maxndvi) (`main_server_batch.py`),
-  generalized from a single hardcoded year to an arbitrary year range and
-  from a pre-tiled file to tiles of a fixed national grid resolved against
-  the caller's own ROI.
-- **Tiling** — a fixed grid anchored at (0, 0) in EPSG:3006 (10 km cells by
-  default, matching Lantmäteriet's national index grid convention), not a
-  per-ROI bounding-box grid. A tile's identity (row, col) is therefore
-  independent of which ROI requested it, so the same tile acquired for one
-  ROI is reused for any other ROI that overlaps it.
-- **Tile store** — a shared, cross-run cache (`tile_store/`, SQLite +
-  GeoTIFFs) of acquired tiles. Before acquiring a tile/year, the pipeline
-  checks whether it's already cached and skips the DES call if so.
-- **Thresholding** — the vegetated/non-vegetated classification method
-  recommended in the Subtask 1.5 (Overleaf) thresholding report: a single
-  Gaussian Mixture Model fit on urban-masked NDVI pixels pooled across all
-  years, thresholded at the analytic intersection of the two fitted
-  Gaussians, followed by a 3-year symmetric majority-vote smoothing of the
-  per-year binary classification.
-- **Statistics & change detection** — annual green area (km²) and % cover,
-  year-on-year change, and a change-year product (see below).
+- **Acquisition** — annual Sentinel-2 max-NDVI composites from [Digital Earth Sweden](https://digitalearth.se).
+- **Tiling** — a fixed grid in SWEREF99 TM (EPSG:3006), matching Lantmäteriet's national index grid convention (10 km cells).
+- **Tile store** — a shared, cross-run cache of acquired tiles. Before acquiring a tile/year, the pipeline checks whether it's already cached and skips the acquisition call if so.
+- **Thresholding** — a vegetated/non-vegetated classification method based on a Gaussian Mixture Model fit on NDVI pixels across all years, thresholded at the intersection of the two fitted Gaussians, followed by a 3-year symmetric majority-vote smoothing of the per-year binary classification.
+- **Statistics & change detection** — annual green area (km²) and % cover, year-on-year change, and a change-year product.
 
 ## Installation
 
-Requires Python ≥ 3.10 and GDAL ≥ 3.11 (via `rasterio`) for native
-`float16` GeoTIFF support, used for the max-NDVI rasters.
+Requires Python ≥ 3.10 and GDAL ≥ 3.11 (via `rasterio`).
 
 ```bash
 # from the repo root
@@ -89,11 +64,8 @@ python -m urban_green.cli \
 `--tile-store <path>` (default `./tile_store`) points at a shared cache of
 acquired NDVI tiles, reused across runs and ROIs — run the pipeline again
 over an overlapping or adjacent ROI and any tiles already in the store are
-reused instead of re-downloaded. The cache key is **`(row, col, year)`
-only** — it does *not* include `--crs` or `--cloud-threshold` — so changing
-either against an existing store will silently reuse tiles acquired under
-the old parameters. Use `--force-reacquire` to bypass the cache, or point
-`--tile-store` at a fresh directory, if you change either setting.
+reused instead of re-downloaded. To bypass the cache, use `--force-reacquire`
+, or point `--tile-store` at a fresh directory.
 
 ### Notebook
 
@@ -103,16 +75,14 @@ figures and tables inline.
 
 ### Credentials
 
-Digital Earth Sweden access uses openEO Basic Auth. Set:
+The pipeline uses our test credentials (`testuser` / `secretpassword`) to access Digital Earth Sweden (openEO Basic Auth.).
+
+To use your own credentials, set:
 
 ```bash
 export DES_USERNAME=your_username
 export DES_PASSWORD=your_password
 ```
-
-If unset, the pipeline falls back to `satdes_maxndvi`'s placeholder test
-credentials (`testuser` / `secretpassword`) so the demonstrator still runs
-out of the box against whatever access those credentials provide.
 
 ## Outputs
 
@@ -127,80 +97,9 @@ Written under `<output_dir>/outputs/`:
 | `change_statistics.csv` | Annual green loss/gain area (km²) |
 | `green_area_statistics_by_region.csv` | Same as above, broken out per named sub-region (only if `--region-id-field` was given) |
 
-Figures matching the Overleaf thresholding report's style are written under
-`<output_dir>/figures/` (NDVI distribution with threshold overlay, green
-area time series with year-on-year change bars).
+
 
 Per-tile NDVI rasters live in the shared tile store (`--tile-store`, default
-`./tile_store/<row>_<col>/<year>/`), not under `<output_dir>` — they're
-cross-run/cross-ROI, not specific to this one. Per-year stitched mosaics for
-this ROI are kept under `<output_dir>/stitched/` for inspection. All other
-outputs (mask, vegetation rasters, change rasters) are on that same grid —
-i.e. the extent of every tile touching the ROI, not the ROI's own tight
-bounding box; the mask correctly excludes anything outside the ROI, so
-statistics are unaffected, but the raster files themselves extend slightly
-beyond the ROI boundary.
+`./tile_store/<row>_<col>/<year>/`). Per-year stitched mosaics for
+this ROI are kept under `<output_dir>/stitched/` for inspection.
 
-## Design notes
-
-- The max-NDVI band is stored as native `float16` (no `[0, 200]` uint8
-  encoding/decoding round-trip, which was a source of a real inconsistency
-  found across the exploratory notebooks: two different decode formulas
-  were in use). Observation count is written as a separate `uint16` file
-  since a single GeoTIFF cannot mix per-band dtypes.
-- `satdes_maxndvi`'s DES-facing query logic
-  (`data_loading/sentinel2.py`, `data_loading/helpers.py`,
-  `methods/composite.py`) is vendored (trimmed, unmodified query logic)
-  under `src/urban_green/maxndvi/`.
-- The mask and NDVI stack are built directly on the stitched mosaic's own
-  grid (`stitching.mosaic_grid`), not on a separately computed ROI-bbox
-  grid — since tiles are acquired in EPSG:3006 (SWEREF99 TM) from the fixed
-  national grid, every year's mosaic for a given ROI is expected to already
-  share an identical pixel grid, so no resampling is needed to align years
-  or the mask. `pipeline._build_ndvi_stack` verifies this on every run and
-  raises rather than silently resampling if a year's mosaic doesn't match.
-- ROI tiling only keeps tiles with positive-area intersection with the ROI
-  (not just `.intersects()`, which also matches tiles that merely touch the
-  ROI boundary with zero overlapping area) — avoids wasted DES acquisition
-  calls for tiles with nothing to cover.
-- The tile store registers a tile only after it has been successfully
-  written to disk, so an interrupted run never leaves a tile falsely marked
-  as cached; `is_available()` also re-checks that the files still exist on
-  disk, so a manually deleted tile is treated as missing rather than a
-  stale hit.
-- The change-year product encodes the **first** transition per pixel per
-  direction (matching the convention of products like Hansen Global Forest
-  Change's "loss year"); loss and gain are reported as separate rasters
-  rather than mixed into one signed/banded product.
-
-## Development
-
-```bash
-pip install -e ".[dev]"
-pytest
-```
-
-The test suite covers the thresholding, change-detection, statistics,
-national-grid tiling, tile-store caching, and tile-grid-consistency logic
-directly, plus one end-to-end integration test that runs the full pipeline
-with the DES
-acquisition step mocked out (everything except the live network call).
-
-## Debugging in VS Code
-
-`.vscode/launch.json` provides four debug configurations (Run and Debug
-panel, or `F5`):
-
-- **urban_green: Run CLI** — runs `urban_green.cli` with the `--roi`/
-  `--years`/`--out` args set in `launch.json`; edit them to point at your
-  own ROI. Credentials are read from a `.env` file in the repo root — copy
-  `.env.example` to `.env` and fill in `DES_USERNAME`/`DES_PASSWORD` (this
-  file is gitignored, never committed).
-- **Python: Debug Current File** — debugs whichever `.py` file is open.
-- **Python: Debug Tests (current file)** / **(all)** — runs `pytest` under
-  the debugger, either just the open test file or the whole `tests/`
-  directory.
-
-Select the repo's venv as the interpreter first (`Ctrl+Shift+P` →
-*Python: Select Interpreter*) so `urban_green` resolves via the editable
-install.

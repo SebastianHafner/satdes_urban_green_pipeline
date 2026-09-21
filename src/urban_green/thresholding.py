@@ -1,13 +1,4 @@
-"""Global-GMM + temporally-smoothed NDVI thresholding.
-
-Ported from notebooks/satdes_task1_thresholding.ipynb, approach B+C: a
-single Gaussian Mixture Model fit on urban-masked NDVI pixels pooled across
-all years, thresholded at the analytic intersection of the two fitted
-Gaussians, then a 3-year symmetric majority-vote smoothing of the resulting
-per-year binary classification. This is the approach recommended by the
-Overleaf thresholding report (Subtask 1.5) as most stable for operational
-use.
-"""
+"""Global-GMM + temporally-smoothed NDVI thresholding."""
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -60,9 +51,7 @@ def classify(ndvi_stack: np.ndarray, mask: np.ndarray, threshold: float) -> np.n
 
 def majority_vote_smooth(binary_stack: np.ndarray, window: int = 3) -> np.ndarray:
     """Symmetric sliding-window majority vote along the year axis (axis 0).
-
-    Edge years are padded by repeating the first/last year, matching the
-    notebook's boundary handling.
+    Edge years are padded by repeating the first/last year.
     """
     if window % 2 == 0:
         raise ValueError("majority_vote window must be odd for a symmetric vote.")

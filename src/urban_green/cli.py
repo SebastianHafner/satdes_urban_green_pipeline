@@ -17,7 +17,7 @@ def parse_years(spec: str) -> List[int]:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Multi-year urban green statistics pipeline (SATDES Subtask 1.6)")
+    parser = argparse.ArgumentParser(description="Multi-year urban green statistics pipeline")
     parser.add_argument("--roi", required=True, help="Path to ROI vector file (any GDAL/OGR format)")
     parser.add_argument("--years", required=True, help="Year range 'start:end' or comma list, e.g. 2018:2025")
     parser.add_argument("--out", required=True, help="Output directory")
@@ -26,9 +26,7 @@ def main() -> None:
         default="./tile_store",
         help=(
             "Shared cache directory for acquired NDVI tiles, reused across runs/ROIs. "
-            "Cache key is (row, col, year) only -- NOT crs/cloud-threshold, so changing "
-            "either against an existing store silently reuses tiles built with the old "
-            "values; use --force-reacquire or a fresh --tile-store if you change them."
+            "Use --force-reacquire or a fresh --tile-store if you change them."
         ),
     )
     parser.add_argument(

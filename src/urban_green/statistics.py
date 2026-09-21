@@ -1,4 +1,4 @@
-"""Annual urban green statistics, akin to the Overleaf thresholding report's results tables."""
+"""Functions to produce annual urban green statistics."""
 from __future__ import annotations
 
 from typing import Dict, List

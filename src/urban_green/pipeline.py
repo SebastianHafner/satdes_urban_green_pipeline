@@ -1,9 +1,8 @@
-"""End-to-end orchestration: ROI -> DES max-NDVI -> thresholding -> statistics -> change -> report.
+"""End-to-end pipeline: ROI -> DES max-NDVI -> thresholding -> statistics -> change -> report.
 
-This is the Subtask 1.6 deliverable: a single runnable pipeline that wires
-together ROI handling, the DES max-NDVI acquisition (satdes_maxndvi), and
-the thresholding methodology (Subtask 1.5 / Overleaf report) into one
-multi-year urban green statistics product.
+This is a single runnable pipeline that wires together ROI handling,
+the DES max-NDVI acquisition, and the thresholding methodology into
+one multi-year urban green statistics product.
 """
 from __future__ import annotations
 
@@ -22,14 +21,7 @@ logger = logging.getLogger(__name__)
 
 
 def _build_ndvi_stack(stitched: dict, years, transform, out_shape) -> np.ndarray:
-    """Stack each year's stitched mosaic directly, with no resampling.
-
-    Tiles come from the fixed national grid, so every year's stitched
-    mosaic for this ROI is expected to already share an identical pixel
-    grid (see stitching.mosaic_grid) -- a mismatch means DES returned a
-    different grid for the same tiles across years, which is treated as an
-    error rather than silently resampled away.
-    """
+    """Stack each year's stitched mosaic."""
     ndvi_stack = np.full((len(years), *out_shape), np.nan, dtype=np.float32)
     for i, year in enumerate(years):
         with rasterio.open(stitched[year]) as src:

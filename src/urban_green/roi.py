@@ -1,9 +1,8 @@
 """Region-of-interest ingestion: load, tile, and rasterize an arbitrary Swedish ROI.
 
-Tiling resolves ROI features against the fixed national grid (see
-urban_green.grid) rather than tiling each ROI's own bounding box, so tile
+Tiling resolves ROI features against the Landmateriet grid, so tile
 identity (row, col) is independent of the requesting ROI and reusable
-across runs via urban_green.tile_store.
+across runs via the tile store.
 """
 from __future__ import annotations
 
@@ -30,12 +29,7 @@ def load_roi(roi_path: Path, crs: str) -> gpd.GeoDataFrame:
 
 
 def tile_roi(roi: gpd.GeoDataFrame, tile_size: float = TILE_SIZE_M_DEFAULT) -> List[Tile]:
-    """Resolve the fixed national grid tiles that positively overlap the ROI.
-
-    The ROI's CRS must be EPSG:3006 (the fixed grid's CRS); reproject with
-    load_roi(..., crs="EPSG:3006") first. Tiles are deduplicated across ROI
-    features, so a tile shared by two adjacent regions is only listed once.
-    """
+    """Resolve the fixed Landmateriet grid tiles that positively overlap the ROI."""
     if str(roi.crs) != GRID_CRS:
         raise ValueError(
             f"the national tiling grid is fixed to {GRID_CRS}, but the ROI is in {roi.crs} -- "

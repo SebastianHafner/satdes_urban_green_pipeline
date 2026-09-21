@@ -1,16 +1,11 @@
 """Per-tile, per-year annual max-NDVI acquisition from Digital Earth Sweden.
 
-This replaces satdes_maxndvi/main_server_batch.py's role: same DES query
-logic (urban_green.maxndvi.sentinel2/composite/helpers), but driven by an
-arbitrary multi-year range and the caller's own ROI tiles instead of a
-pre-tiled file and a single hardcoded year. The max-NDVI band is written as
-native float16 (no [0, 200] uint8 encoding), and observation count as a
-separate uint16 file since a single GeoTIFF cannot mix per-band dtypes.
+The max-NDVI band is written as native float16, and observation count as a
+separate uint16 file.
 
-Tiles are resolved against the fixed national grid (urban_green.grid) and
-cached in a shared urban_green.tile_store.TileStore, so a tile already
-acquired by a previous run (for this or any other ROI) is reused instead of
-being re-downloaded.
+Tiles are resolved against the Landmateriet grid and cached in a shared
+tile store, so a tile already acquired by a previous run  is reused instead
+of being re-downloaded.
 """
 from __future__ import annotations
 

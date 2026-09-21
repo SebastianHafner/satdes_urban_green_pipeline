@@ -1,8 +1,5 @@
-"""Vendored from satdes_maxndvi/data_loading/sentinel2.py (unchanged logic).
-
-These are the pure, side-effect-free openEO process-graph builders that
-satdes_maxndvi/main_server_batch.py drives directly. Kept as-is so the
-DES-facing query logic stays consistent with the upstream repo.
+"""
+These are the openEO functions to download and process Sentinel-2 imagery from Digital Earth Sweden.
 """
 from __future__ import annotations
 
