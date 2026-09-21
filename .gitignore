@@ -5,6 +5,7 @@ __pycache__/
 build/
 dist/
 outputs/
+outputs_demo/
 tile_store/
 .ipynb_checkpoints/
 .venv/
