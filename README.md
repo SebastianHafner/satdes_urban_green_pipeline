@@ -7,7 +7,7 @@ It wires together:
 - **Acquisition** — annual Sentinel-2 max-NDVI composites from [Digital Earth Sweden](https://digitalearth.se).
 - **Tiling** — a fixed grid in SWEREF99 TM (EPSG:3006), matching Lantmäteriet's national index grid convention (10 km cells).
 - **Tile store** — a shared, cross-run cache of acquired tiles. Before acquiring a tile/year, the pipeline checks whether it's already cached and skips the acquisition call if so.
-- **Thresholding** — a vegetated/non-vegetated classification method based on a Gaussian Mixture Model fit on NDVI pixels across all years, thresholded at the intersection of the two fitted Gaussians, followed by a 3-year symmetric majority-vote smoothing of the per-year binary classification.
+- **Thresholding** — a vegetated/non-vegetated classification method using a Gaussian Mixture Model and temporal smoothing.
 - **Statistics & change detection** — annual green area (km²) and % cover, year-on-year change, and a change-year product.
 
 ## Installation
@@ -43,14 +43,9 @@ python -m urban_green.cli \
 Any GDAL/OGR-readable vector format is accepted for `--roi` (Shapefile,
 GeoPackage, GeoParquet, GeoJSON, ...). `--years` accepts either an
 inclusive range (`2018:2025`) or an explicit comma list (`2018,2020,2022`).
-Pass `--region-id-field <column>` to also get per-named-sub-region
-statistics when the ROI has multiple features (e.g. several municipalities
-or tätorter).
 
 `tests/data/tatorter_2023_orebro.parquet` (the Örebro tätort boundary,
-EPSG:3006) is bundled as a ready-made example ROI — the same one the
-Overleaf Subtask 1.5 report validates against — useful for a quick first
-run or for manual/debug testing:
+EPSG:3006) is an example ROI useful for testing:
 
 ```bash
 python -m urban_green.cli \
@@ -62,8 +57,8 @@ python -m urban_green.cli \
 ### Tile store (acquisition cache)
 
 `--tile-store <path>` (default `./tile_store`) points at a shared cache of
-acquired NDVI tiles, reused across runs and ROIs — run the pipeline again
-over an overlapping or adjacent ROI and any tiles already in the store are
+acquired NDVI tiles, reused across runs and ROIs. If you run the pipeline again
+over an overlapping or adjacent ROI, any tiles that are already in the store are
 reused instead of re-downloaded. To bypass the cache, use `--force-reacquire`
 , or point `--tile-store` at a fresh directory.
 
@@ -71,7 +66,8 @@ reused instead of re-downloaded. To bypass the cache, use `--force-reacquire`
 
 `notebooks/urban_green_demo.ipynb` is a thin GUI front end over the same
 package: preview the ROI, run the pipeline, and inspect the resulting
-figures and tables inline.
+figures and tables inline. It also provides guidance on how to interpret the
+outputs of the pipeline.
 
 ### Credentials
 
