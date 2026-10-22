@@ -5,6 +5,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import List, Optional
 
+from urban_green.thresholding import GMM_SAMPLE_SIZE_DEFAULT
+
 DES_ENDPOINT_DEFAULT = "https://openeo.digitalearth.se"
 # Placeholder test credentials from satdes_maxndvi, used only as a fallback so the
 # demonstrator still runs out of the box. Set DES_USERNAME / DES_PASSWORD for real access.
@@ -31,6 +33,12 @@ class PipelineConfig:
     cloud_threshold: int = 70  # max eo:cloud_cover percentage per Sentinel-2 scene
     crs: str = "EPSG:3006"  # SWEREF99 TM
     majority_vote_window: int = 3  # years, for temporal smoothing of the vegetation classification
+    # User-defined NDVI threshold for vegetated/non-vegetated classification. When set, the
+    # automatic global-GMM threshold detection is skipped.
+    ndvi_threshold: Optional[float] = None
+    # Maximum number of pixels the automatic GMM threshold is fitted on; larger ROIs are
+    # randomly subsampled to this size. Ignored when ndvi_threshold is set.
+    gmm_sample_size: int = GMM_SAMPLE_SIZE_DEFAULT
 
     # Optional column in the ROI file used to name/group sub-regions (e.g. municipality name).
     # When set, the ROI is tiled and statistics are reported per named feature.
@@ -53,3 +61,7 @@ class PipelineConfig:
         self.years = sorted(self.years)
         if len(self.years) < 2:
             raise ValueError("At least two years are required to compute year-on-year statistics.")
+        if self.ndvi_threshold is not None and not -1.0 <= self.ndvi_threshold <= 1.0:
+            raise ValueError(f"ndvi_threshold must be within [-1, 1], got {self.ndvi_threshold}.")
+        if self.gmm_sample_size < 2:
+            raise ValueError(f"gmm_sample_size must be at least 2, got {self.gmm_sample_size}.")

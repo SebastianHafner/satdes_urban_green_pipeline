@@ -36,7 +36,7 @@ def tile_roi(roi: gpd.GeoDataFrame, tile_size: float = TILE_SIZE_M_DEFAULT) -> L
             f"reproject the ROI to {GRID_CRS} first (see load_roi)."
         )
 
-    footprint = roi.union_all() if hasattr(roi, "union_all") else roi.unary_union
+    footprint = roi_geometry(roi)
     tiles = national_grid_tiles(footprint, tile_size)
     if not tiles:
         raise ValueError("ROI tiling produced no tiles; check the ROI geometry and tile_size.")
@@ -67,9 +67,21 @@ def roi_grid_transform(roi: gpd.GeoDataFrame, grid_size: int) -> Tuple[Affine, T
     return transform, (height, width)
 
 
-def rasterize_roi_mask(roi: gpd.GeoDataFrame, transform: Affine, out_shape: Tuple[int, int]) -> np.ndarray:
-    """Rasterize the union of all ROI geometries onto a grid; True where covered by the ROI."""
-    geom = roi.union_all() if hasattr(roi, "union_all") else roi.unary_union
+def roi_geometry(roi: gpd.GeoDataFrame):
+    """Union of all ROI geometries."""
+    return roi.union_all() if hasattr(roi, "union_all") else roi.unary_union
+
+
+def region_geometries(roi: gpd.GeoDataFrame, region_id_field: str) -> dict:
+    """Union of the ROI geometries per named sub-region, keyed by str(name)."""
+    geoms = {}
+    for name, group in roi.groupby(region_id_field):
+        geoms[str(name)] = group.union_all() if hasattr(group, "union_all") else group.unary_union
+    return geoms
+
+
+def rasterize_geometry(geom, transform: Affine, out_shape: Tuple[int, int]) -> np.ndarray:
+    """Rasterize one geometry onto a grid (or a window of one); True where covered."""
     mask = rasterize(
         [(geom, 1)],
         out_shape=out_shape,
@@ -81,15 +93,16 @@ def rasterize_roi_mask(roi: gpd.GeoDataFrame, transform: Affine, out_shape: Tupl
     return mask.astype(bool)
 
 
+def rasterize_roi_mask(roi: gpd.GeoDataFrame, transform: Affine, out_shape: Tuple[int, int]) -> np.ndarray:
+    """Rasterize the union of all ROI geometries onto a grid; True where covered by the ROI."""
+    return rasterize_geometry(roi_geometry(roi), transform, out_shape)
+
+
 def region_masks(
     roi: gpd.GeoDataFrame, transform: Affine, out_shape: Tuple[int, int], region_id_field: str
 ) -> dict:
     """Rasterize each named sub-region of the ROI separately, for per-region statistics."""
-    masks = {}
-    for name, group in roi.groupby(region_id_field):
-        geom = group.union_all() if hasattr(group, "union_all") else group.unary_union
-        mask = rasterize(
-            [(geom, 1)], out_shape=out_shape, transform=transform, fill=0, dtype="uint8", all_touched=False
-        )
-        masks[str(name)] = mask.astype(bool)
-    return masks
+    return {
+        name: rasterize_geometry(geom, transform, out_shape)
+        for name, geom in region_geometries(roi, region_id_field).items()
+    }

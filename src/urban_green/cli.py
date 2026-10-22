@@ -6,6 +6,7 @@ from typing import List
 
 from urban_green.config import PipelineConfig
 from urban_green.pipeline import run
+from urban_green.thresholding import GMM_SAMPLE_SIZE_DEFAULT
 
 
 def parse_years(spec: str) -> List[int]:
@@ -37,6 +38,21 @@ def main() -> None:
     parser.add_argument("--crs", default="EPSG:3006", help="Working CRS (default: SWEREF99 TM)")
     parser.add_argument("--majority-vote-window", type=int, default=3, help="Temporal smoothing window (years)")
     parser.add_argument(
+        "--ndvi-threshold",
+        type=float,
+        default=None,
+        help="User-defined NDVI threshold for vegetation; skips the automatic GMM threshold detection",
+    )
+    parser.add_argument(
+        "--gmm-sample-size",
+        type=int,
+        default=GMM_SAMPLE_SIZE_DEFAULT,
+        help=(
+            "Maximum number of pixels used to fit the automatic GMM threshold; ROIs with more valid "
+            "pixels are randomly subsampled. Ignored when --ndvi-threshold is set."
+        ),
+    )
+    parser.add_argument(
         "--region-id-field", default=None, help="ROI column to group tiles/statistics by named sub-region"
     )
     parser.add_argument("-v", "--verbose", action="store_true")
@@ -57,6 +73,8 @@ def main() -> None:
         cloud_threshold=args.cloud_threshold,
         crs=args.crs,
         majority_vote_window=args.majority_vote_window,
+        ndvi_threshold=args.ndvi_threshold,
+        gmm_sample_size=args.gmm_sample_size,
         region_id_field=args.region_id_field,
     )
     run(config)
