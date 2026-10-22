@@ -1,4 +1,4 @@
-"""Figures in the same style as the Overleaf thresholding report, for direct comparability."""
+"""Figures showing the NDVI distribution (incl. threshold) and urban green statistics."""
 from __future__ import annotations
 
 from pathlib import Path

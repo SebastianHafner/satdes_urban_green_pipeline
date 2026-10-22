@@ -54,6 +54,21 @@ python -m urban_green.cli \
     --out ./outputs
 ```
 
+### NDVI threshold
+
+By default the vegetated/non-vegetated threshold is detected automatically
+(global GMM over all ROI pixels and years). If the detected threshold falls
+outside the expected range (0.2–0.6, `REASONABLE_THRESHOLD_RANGE` in
+`thresholding.py`), a warning is logged — check `figures/ndvi_distribution.png`.
+For large ROIs the GMM is fitted on a random sample of at most 1,000,000 valid
+pixels (change with `--gmm-sample-size`); smaller ROIs use all pixels.
+To skip automatic detection and use your own threshold, pass `--ndvi-threshold`:
+
+```bash
+python -m urban_green.cli --roi tests/data/tatorter_2023_orebro.parquet \
+    --years 2022:2025 --out ./outputs --ndvi-threshold 0.5
+```
+
 ### Tile store (acquisition cache)
 
 `--tile-store <path>` (default `./tile_store`) points at a shared cache of
@@ -96,6 +111,9 @@ Written under `<output_dir>/outputs/`:
 
 
 Per-tile NDVI rasters live in the shared tile store (`--tile-store`, default
-`./tile_store/<row>_<col>/<year>/`). Per-year stitched mosaics for
-this ROI are kept under `<output_dir>/stitched/` for inspection.
+`./tile_store/<row>_<col>/<year>/`). The pipeline processes them one
+tile (all years) at a time, so memory use depends on the tile size, not the
+ROI size. Per-year mosaics for this ROI are written as VRTs
+(`<output_dir>/stitched/maxndvi_<year>.vrt`) for inspection; they reference
+the tile files by absolute path, so they break if the tile store is moved.
 
