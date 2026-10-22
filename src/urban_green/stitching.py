@@ -5,8 +5,8 @@ urban_green.tile_store.TileStore, so only the tiles relevant to the current
 ROI are used even when the store holds many more tiles overall. Instead of
 mosaicking every year into memory, the pipeline processes one tile (all
 years) at a time, writing each into its window of the working grid. The
-per-year "stitched" mosaics are written as lightweight VRTs that reference
-the tile files rather than copying them.
+per-year "stitched" mosaics are written as VRTs that reference
+the tile files.
 """
 from __future__ import annotations
 
